@@ -1,0 +1,35 @@
+{
+  "name": "gpu-ez",
+  "version": "0.1.0",
+  "description": "Easy GLSL parallel computing on GPU.JS",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tarquas/gpu-ez.git"
+  },
+  "keywords": [
+    "gpu",
+    "glsl",
+    "parallel",
+    "computing",
+    "node",
+    "js",
+    "canvas",
+    "gl",
+    "webgl",
+    "matrix",
+    "inverse"
+  ],
+  "author": "Taras Mykhailovych",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tarquas/gpu-ez/issues"
+  },
+  "homepage": "https://github.com/tarquas/gpu-ez#readme",
+  "dependencies": {
+    "gpu.js": "^2.0.0-rc.6"
+  }
+}
