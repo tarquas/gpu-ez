@@ -3,8 +3,40 @@ const GpuEz = {};
 GpuEz.gpuInit = function gpuInit(GPU) {
   GpuEz.GPU = GPU;
   GpuEz.gpu = new GPU();
-  GpuEz.gpuTexToArray = GpuEz.gpu.createKernel(...GpuEz.gpuTexToArrayDef);
-  GpuEz.gpuArrayToTex = GpuEz.gpu.createKernel(...GpuEz.gpuArrayToTexDef);
+
+  GpuEz.texToArrayKernelByDims = {
+    1: GpuEz.gpu.createKernel(
+      function(arr) {return arr[this.thread.x];},
+      {immutable: true, skipValidate: true, returnType: 'Number'}
+    ),
+
+    2: GpuEz.gpu.createKernel(
+      function(arr) {return arr[this.thread.y][this.thread.x];},
+      {immutable: true, skipValidate: true, returnType: 'Number'}
+    ),
+
+    3: GpuEz.gpu.createKernel(
+      function(arr) {return arr[this.thread.z][this.thread.y][this.thread.x];},
+      {immutable: true, skipValidate: true, returnType: 'Number'}
+    )
+  };
+
+  GpuEz.arrayToTexKernelByDims = {
+    1: GpuEz.gpu.createKernel(
+      function(arr) {return arr[this.thread.x];},
+      {pipeline: true, immutable: true, skipValidate: true, returnType: 'Number'}
+    ),
+
+    2: GpuEz.gpu.createKernel(
+      function(arr) {return arr[this.thread.y][this.thread.x];},
+      {pipeline: true, immutable: true, skipValidate: true, returnType: 'Number'}
+    ),
+
+    3: GpuEz.gpu.createKernel(
+      function(arr) {return arr[this.thread.z][this.thread.y][this.thread.x];},
+      {pipeline: true, immutable: true, skipValidate: true, returnType: 'Number'}
+    )
+  };
 };
 
 GpuEz.rxGlslDesc = /GLSL\W+(\w+)\s*\(([^\)]*)\)\s*(\{[^\}]*\})\s*\{([^\}]+)\}/;
@@ -22,8 +54,11 @@ GpuEz.argEntsMacro = function([, name,, dim]) {
     default: throw new Error(`Invalid number of dimensions {${dim}} for arg ${name}`);
   }
 
-  const macro = `#define user_${name}(${a}) get(user_${name}, user_${name}Size, user_${name}Dim, ` +
-    `user_${name}BitRatio, ${c})\n`;
+  const method = 'getFloatFromSampler2D';
+
+  const macro = `#define user_${name}(${a}) ` +
+    `${method}(user_${name}, user_${name}Size, user_${name}Dim, ${c})\n`;
+
   return macro;
 };
 
@@ -48,6 +83,7 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
       pipeline: true,
       immutable: true,
       skipValidate: true,
+      returnType: 'Number',
       debug: !!debug
     }
   ];
@@ -57,12 +93,17 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const gpuJs = {kernel};
   const {arrayOut} = GpuEz;
 
-  const invoke = eval(`(function ${name}(${argNames}) {
+  const invoke = eval(`(function ${name}(...args) {
+    for (let i = 0; i < args.length; i++)
+      if (args[i] instanceof Array || args[i] instanceof Float32Array)
+        args[i] = GpuEz.arrayToTex(args[i]);
+    const [${argNames}] = args;
     kernel.loopMaxIterations = parseInt(${iters});
     kernel.setOutput(GpuEz.fixDimObj(${dim}));
     kernel.validateSettings();
     if (!kernel.pipeline) GpuEz.fixFbDim(kernel);
-    return kernel(${argNames});
+    kernel.returnType = 'Number';
+    return kernel(...args);
   })`);
 
   Object.assign(invoke, {gpuJs, arrayOut});
@@ -81,10 +122,6 @@ GpuEz.arrayOut = function(...args) {
 };
 
 /////
-
-GpuEz.gpuTexToArrayDef = [function(arr) {
-  return arr[this.thread.z][this.thread.y][this.thread.x];
-}, {immutable: true, skipValidate: true}];
 
 GpuEz.fixDimObj = function(dim) {
   for (const k in dim) {
@@ -106,17 +143,15 @@ GpuEz.fixFbDim = function(kernel) {
 };
 
 GpuEz.texToArray = function texToArray(tex) {
-  const kernel = GpuEz.gpuTexToArray;
+  if (!tex.output) return tex;
+  const kernel = GpuEz.texToArrayKernelByDims[tex.output.length];
+  if (!kernel) return null;
   kernel.setOutput(tex.output);
   kernel.validateSettings();
   GpuEz.fixFbDim(kernel);
   const result = kernel(tex);
   return result;
 };
-
-GpuEz.gpuArrayToTexDef = [function(arr) {
-  return arr[this.thread.z][this.thread.y][this.thread.x];
-}, {pipeline: true, immutable: true, skipValidate: true}];
 
 GpuEz.getArrayDim = function(arr) {
   const dim = [];
@@ -133,7 +168,8 @@ GpuEz.getArrayDim = function(arr) {
 
 GpuEz.arrayToTex = function arrayToTex(arr) {
   const dim = GpuEz.getArrayDim(arr);
-  const kernel = GpuEz.gpuArrayToTex;
+  const kernel = GpuEz.arrayToTexKernelByDims[dim.length];
+  if (!kernel) return null;
   kernel.setOutput(dim);
   kernel.validateSettings();
   const result = kernel(arr);

@@ -11,7 +11,7 @@ async function main() {
 
     function invMatrix(matrix) {
       const size = matrix.length;
-      let invStep = invInit(matrix, size); 
+      let invStep = invInit(matrix, size);
 
       for (let i = 0; i < size; i++) {
         const norm = invRow(invStep, size, i);
@@ -34,8 +34,8 @@ async function main() {
     const pretty = inv.map((row) => (
       row.map((cell) => (
         cell.toFixed(2)
-      ).join(' \t '))
-    ).join('\n'));
+      )).join(' \t ')
+    )).join('\n');
 
     console.log(pretty);
   } catch (err) {
