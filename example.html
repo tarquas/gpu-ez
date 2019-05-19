@@ -19,7 +19,7 @@ async function glsl(file) {
 
 async function main() {
   const [invInit, invRow, invResult] = await Promise.all([
-    glsl('inv-matrix-init.c', 'var xx = data[3];'),
+    glsl('inv-matrix-init.c'),
     glsl('inv-matrix-row.c'),
     glsl('inv-matrix-result.c')
   ]);
