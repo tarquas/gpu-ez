@@ -76,7 +76,7 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const funcDesc = {name, source: `${argMacro}${content}`};
 
   const kernelSettings = [
-    Function(argNames, `${debug || ''};return ${name}();`),
+    Function(argNames, `${debug || ''};return 0.0 + ${name}();`),
 
     {
       nativeFunctions: [funcDesc],
