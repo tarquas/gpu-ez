@@ -1,6 +1,6 @@
 {
   "name": "gpu-ez",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Easy GLSL parallel computing on GPU.JS",
   "main": "index.js",
   "scripts": {
@@ -30,6 +30,6 @@
   },
   "homepage": "https://github.com/tarquas/gpu-ez#readme",
   "dependencies": {
-    "gpu.js": "2.0.0-rc.23"
+    "gpu.js": "2.0.0-rc.24"
   }
 }
