@@ -43,23 +43,32 @@ GpuEz.rxGlslDesc = /GLSL\W+(\w+)\s*(?:\{\s*([^\}]+)\s*\})?\s*\(([^\)]*)\)\s*(\{[
 GpuEz.rxArgItems = /(\w+)(\s*\{([^\}]*)\})?/g;
 GpuEz.rxArgItem = new RegExp(GpuEz.rxArgItems.source);
 
-GpuEz.argEntsMacro = function([, name,, dim]) {
-  let a, c;
+GpuEz.argEntsMacroByDim = {
+  1: {a: 'x', c: '0,0,x'},
+  2: {a: 'y,x', c: '0,y,x'},
+  3: {a: 'z,y,x', c: 'z,y,x'}
+};
 
-  switch (dim) {
-    case undefined: case '': return ``;
-    case '1': a = 'x'; c = '0,0,x'; break;
-    case '2': a = 'y,x'; c = '0,y,x'; break;
-    case '3': a = 'z,y,x'; c = 'z,y,x'; break;
-    default: throw new Error(`Invalid number of dimensions {${dim}} for arg ${name}`);
+GpuEz.argEntsMacro = function([, name,, dim]) {
+  if (!dim) return '';
+
+  if (!(dim in GpuEz.argEntsMacroByDim)) {
+    throw new Error(`Invalid number of dimensions {${dim}} for arg ${name}`);
   }
 
+  const {a, c} = GpuEz.argEntsMacroByDim[dim];
   const method = 'getFloatFromSampler2D';
 
   const macro = `#define user_${name}(${a}) ` +
     `${method}(user_${name}, user_${name}Size, user_${name}Dim, ${c})\n`;
 
   return macro;
+};
+
+GpuEz.glslPadByDim = {
+  2: '[0,0]',
+  3: '[0,0,0]',
+  4: '[0,0,0,0]'
 };
 
 GpuEz.glsl = function gpuGlsl(content, debug) {
@@ -77,7 +86,10 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const funcDesc = {name, source: `${argMacro}${content}`};
 
   const kernelSettings = [
-    Function(argNames, `${debug || ''};return 0.0 + ${name}();`),
+    Function(
+      argNames,
+      `${debug || ''}; let pad = ${GpuEz.glslPadByDim[vec] || 0}; pad = ${name}(); return pad;`
+    ),
 
     {
       nativeFunctions: [funcDesc],
@@ -85,7 +97,7 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
       immutable: true,
       dynamicOutput: true,
       dynamicArguments: true,
-      returnType: vec === '4' ? 'Array(4)' : vec === '3' ? 'Array(3)' : vec === '2' ? 'Array(2)' : 'Number',
+      returnType: +vec > 1 ? `Array(${vec})` : 'Number',
       debug: !!debug
     }
   ];
@@ -146,7 +158,7 @@ GpuEz.getArrayDim = function(arr) {
   const dim = [];
   let sub = arr;
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     if (!sub || !sub.length) break;
     dim.unshift(sub.length);
     sub = sub[0];
@@ -175,6 +187,7 @@ GpuEz.getArray = function getArray(tex) {
     case 1: return Array.from(arr);
     case 2: return arr.map(y => Array.from(y));
     case 3: return arr.map(z => z.map(y => Array.from(y)));
+    case 4: return arr.map(v => v.map(z => z.map(y => Array.from(y))));
     default: throw new Error(`Dimension ${dim.length} is not supported`);
   }
 };

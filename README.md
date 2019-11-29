@@ -15,13 +15,16 @@ workarounds and several useful helpers we can use in GLSL code.
 GLSL content must contain string of the following pattern in comment:
 
 ```js
-GLSL: functionName(functionArgs, ...) {dimensions} {maxIterations}
+GLSL: functionName{vectorSize}(functionArgs, ...) {dimensions} {maxIterations}
 ```
 
 where:
 
 - `functionName` -- identifier: a name of entry point function,
 which must be declared in GLSL code as `float functionName() {...}`;
+
+- `vectorSize` -- optional number from 2 to 4, indicating that result
+is a vector of specified size rather than a float number;
 
 - `functionArgs, ...` -- comma-separated identifiers; can be numbers,
 JS arrays, or GPU arrays ("textures", returned by default from
@@ -45,6 +48,18 @@ inner dimension of resulting array;
 - `maxIterations` must be set to JS expression of numbers and
 arguments, representing number of total iterations of the most inner
 loops inside GLSL code.
+
+For example:
+
+```js
+// GLSL: getCoords{3}(map{2}, mapsize) {y: mapsize, x: mapsize} {1}
+vec3 getCoords(void) { return vec3(threadId.x, map(threadId.x, 0), map(0, threadId.x)); }
+```
+
+```js
+/* GLSL: add(a, b) {x: 1} {1} */
+float add(void) { return user_a + user_b; }
+```
 
 ## JS
 
