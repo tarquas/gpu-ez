@@ -17,10 +17,14 @@ const path = require('path');
 const util = require('util');
 const readFile = util.promisify(fs.readFile);
 const GpuEz = require('./gpu-ez');
+const cPre = require('c-preprocessor');
+const compile = util.promisify(cPre.compile).bind(cPre);
 
 GpuEz.glslFile = async function gpuGlslFile(filename, debug) {
   const content = await readFile(filename, 'utf8');
-  const result = GpuEz.glsl(content, debug);
+  const opts = {basePath: `${path.dirname(filename)}/`};
+  const compiled = await compile(content, opts);
+  const result = GpuEz.glsl(compiled, debug);
   return result;
 }
 

@@ -15,7 +15,7 @@ workarounds and several useful helpers we can use in GLSL code.
 GLSL content must contain string of the following pattern in comment:
 
 ```js
-GLSL: functionName{vectorSize}(functionArgs, ...) {dimensions} {maxIterations}
+GLSL: functionName[vectorSize](functionArgs, ...) {dimensions} {maxIterations}
 ```
 
 where:
@@ -33,6 +33,9 @@ number in curly braces, indicating the number of dimensions;
 inside GLSL code, arguments get prefixed by `user_` prefix;
 arrays are accessible via parentheses, f.x. 3D array declared as
 `array{3}` can be referred as `array(z,y,x)` from GLSL code;
+if arg name is appended by `[vectorSize]`, it's type is a vector of
+specified size rather than 'float' (f.x. `array[4]{1}` --
+one-dimensional array of 4-sized vectors);
 
 - `dimensions` is representing dimensions of resulting array:
 comma-separated `key: value` pairs of format: `x: ...` for 1D array,
@@ -52,7 +55,7 @@ loops inside GLSL code.
 For example:
 
 ```js
-// GLSL: getCoords{3}(map{2}, mapsize) {y: mapsize, x: mapsize} {1}
+// GLSL: getCoords[3](map{2}, mapsize) {y: mapsize, x: mapsize} {1}
 vec3 getCoords(void) { return vec3(threadId.x, map(threadId.x, 0), map(0, threadId.x)); }
 ```
 

@@ -39,8 +39,8 @@ GpuEz.gpuInit = function gpuInit(GPU) {
   };
 };
 
-GpuEz.rxGlslDesc = /GLSL\W+(\w+)\s*(?:\{\s*([^\}]+)\s*\})?\s*\(([^\)]*)\)\s*(\{[^\}]*\})\s*\{([^\}]+)\}/;
-GpuEz.rxArgItems = /(\w+)(\s*\{([^\}]*)\})?/g;
+GpuEz.rxGlslDesc = /GLSL\W+(\w+)\s*(?:\[\s*([^\]]+)\s*\])?\s*\(([^\)]*)\)\s*(\{[^\}]*\})\s*\{([^\}]+)\}/;
+GpuEz.rxArgItems = /(\w+)(?:\s*\[([^\]]+)\])?(?:\s*\{([^\}]*)\})?/g;
 GpuEz.rxArgItem = new RegExp(GpuEz.rxArgItems.source);
 
 GpuEz.argEntsMacroByDim = {
@@ -49,7 +49,7 @@ GpuEz.argEntsMacroByDim = {
   3: {a: 'z,y,x', c: 'z,y,x'}
 };
 
-GpuEz.argEntsMacro = function([, name,, dim]) {
+GpuEz.argEntsMacro = function([, name, vec, dim]) {
   if (!dim) return '';
 
   if (!(dim in GpuEz.argEntsMacroByDim)) {
@@ -57,7 +57,7 @@ GpuEz.argEntsMacro = function([, name,, dim]) {
   }
 
   const {a, c} = GpuEz.argEntsMacroByDim[dim];
-  const method = 'getFloatFromSampler2D';
+  const method = `get${ +vec > 1 ? 'Vec'+vec : 'Float'}FromSampler2D`;
 
   const macro = `#define user_${name}(${a}) ` +
     `${method}(user_${name}, user_${name}Size, user_${name}Dim, ${c})\n`;
@@ -77,9 +77,10 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   // Format: // GLSL functionName{vectorSize}(arg1, arg2) {x: dim1, y: dim2, z: dim3} {nLoopIterations}
   //   * {vectorSize} is optional
   // Example: // GLSL matrixMultiply(mat1{2}, mat2{2}, size, mat1h, mat2w) {y: mat1h, x: mat2w} {size}
-  if (!name) throw new Error(`GLSL descriptor is not found`);
+  if (!name) throw new Error(`GLSL descriptor is not found in:\n ${content.substr(0, 80)}...`);
 
   const argEnts = args.match(GpuEz.rxArgItems).map(arg => arg.match(GpuEz.rxArgItem)).filter(x => x);
+
   const argNames = argEnts.map(arg => arg[1]);
   const argMacro = argEnts.map(GpuEz.argEntsMacro).join('');
 
