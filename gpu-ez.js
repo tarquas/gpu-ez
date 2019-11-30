@@ -3,41 +3,48 @@ const GpuEz = {};
 GpuEz.gpuInit = function gpuInit(GPU) {
   GpuEz.GPU = GPU;
   GpuEz.gpu = new GPU();
-
-  GpuEz.texToArrayKernelByDims = {
-    1: GpuEz.gpu.createKernel(
-      function(arr) {return arr[this.thread.x];},
-      {immutable: true, dynamicOutput: true, dynamicArguments: true, returnType: 'Number'}
-    ),
-
-    2: GpuEz.gpu.createKernel(
-      function(arr) {return arr[this.thread.y][this.thread.x];},
-      {immutable: true, dynamicOutput: true, dynamicArguments: true, returnType: 'Number'}
-    ),
-
-    3: GpuEz.gpu.createKernel(
-      function(arr) {return arr[this.thread.z][this.thread.y][this.thread.x];},
-      {immutable: true, dynamicOutput: true, dynamicArguments: true, returnType: 'Number'}
-    )
-  };
-
-  GpuEz.arrayToTexKernelByDims = {
-    1: GpuEz.gpu.createKernel(
-      function(arr) {return arr[this.thread.x];},
-      {pipeline: true, immutable: true, dynamicOutput: true, dynamicArguments: true, returnType: 'Number'}
-    ),
-
-    2: GpuEz.gpu.createKernel(
-      function(arr) {return arr[this.thread.y][this.thread.x];},
-      {pipeline: true, immutable: true, dynamicOutput: true, dynamicArguments: true, returnType: 'Number'}
-    ),
-
-    3: GpuEz.gpu.createKernel(
-      function(arr) {return arr[this.thread.z][this.thread.y][this.thread.x];},
-      {pipeline: true, immutable: true, dynamicOutput: true, dynamicArguments: true, returnType: 'Number'}
-    )
-  };
 };
+
+GpuEz.returnTypes = {
+  1: 'Number',
+  2: 'Array(2)',
+  3: 'Array(3)',
+  4: 'Array(4)'
+};
+
+GpuEz.returnTypeDims = Object.assign({}, ...Object.entries(GpuEz.returnTypes).map(([k, v]) => ({[v]: k})));
+
+GpuEz.preKernelFuncs = {
+  1: function(arr) {return arr[this.thread.x];},
+  2: function(arr) {return arr[this.thread.y][this.thread.x];},
+  3: function(arr) {return arr[this.thread.z][this.thread.y][this.thread.x];}
+};
+
+GpuEz.preKernels = {get: {1: {}, 2: {}, 3: {}}, put: {1: {}, 2: {}, 3: {}}};
+
+GpuEz.getPreKernel = function getPreKernel(put, dim, type) {
+  const pre = GpuEz.preKernels;
+  const nDim = dim | 0 || 1;
+  const byType = (put ? pre.put : pre.get)[nDim];
+  if (!byType) throw new Error(`Invalid number of dimensions: ${dim}`);
+
+  const vec = GpuEz.returnTypeDims[type];
+  if (!vec) throw new Error(`Invalid data type: ${type}`);
+
+  const kernel = byType[type];
+  if (kernel) return kernel;
+
+  const func = GpuEz.preKernelFuncs[nDim];
+
+  const opts = {
+    pipeline: !!put, immutable: true, dynamicOutput: true, dynamicArguments: true,
+    returnType: type, argumentTypes: {arr: vec > 1 ? `Array${nDim}D(${vec})` : 'Array'}
+  };
+
+  const newKernel = GpuEz.gpu.createKernel(func, opts);
+  byType[type] = newKernel;
+  return newKernel;
+}
 
 GpuEz.rxGlslDesc = /GLSL\W+(\w+)\s*(?:\[\s*([^\]]+)\s*\])?\s*\(([^\)]*)\)\s*(\{[^\}]*\})\s*\{([^\}]+)\}/;
 GpuEz.rxArgItems = /(\w+)(?:\s*\[([^\]]+)\])?(?:\s*\{([^\}]*)\})?/g;
@@ -66,6 +73,7 @@ GpuEz.argEntsMacro = function([, name, vec, dim]) {
 };
 
 GpuEz.glslPadByDim = {
+  1: '0',
   2: '[0,0]',
   3: '[0,0,0]',
   4: '[0,0,0,0]'
@@ -82,6 +90,7 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const argEnts = args.match(GpuEz.rxArgItems).map(arg => arg.match(GpuEz.rxArgItem)).filter(x => x);
 
   const argNames = argEnts.map(arg => arg[1]);
+  const argVecs = argEnts.map(arg => arg[2]);
   const argMacro = argEnts.map(GpuEz.argEntsMacro).join('');
 
   const funcDesc = {name, source: `${argMacro}${content}`};
@@ -89,7 +98,10 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const kernelSettings = [
     Function(
       argNames,
-      `${debug || ''}; let pad = ${GpuEz.glslPadByDim[vec] || 0}; pad = ${name}(); return pad;`
+      `${debug || ''};
+      let pad = ${GpuEz.glslPadByDim[vec] || GpuEz.glslPadByDim[1]};
+      pad = ${name}();
+      return pad;`
     ),
 
     {
@@ -98,7 +110,7 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
       immutable: true,
       dynamicOutput: true,
       dynamicArguments: true,
-      returnType: +vec > 1 ? `Array(${vec})` : 'Number',
+      returnType: GpuEz.returnTypes[vec] || GpuEz.returnTypes[1],
       debug: !!debug
     }
   ];
@@ -111,7 +123,12 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const invoke = eval(`(function ${name}(...args) {
     const temps = [];
     for (let i = 0; i < args.length; i++) if (args[i] instanceof Array || args[i] instanceof Float32Array) {
-      temps.push(args[i] = GpuEz.arrayToTex(args[i]));
+      temps.push(
+        args[i] = GpuEz.arrayToTex(
+          args[i],
+          GpuEz.returnTypes[argVecs[i]] || GpuEz.returnTypes[1]
+        )
+      );
     }
     const [${argNames}] = args;
     kernel.loopMaxIterations = parseInt(${iters});
@@ -148,14 +165,16 @@ GpuEz.fixDimObj = function(dim) {
 
 GpuEz.texToArray = function texToArray(tex) {
   if (!tex.output) return tex;
-  const kernel = GpuEz.texToArrayKernelByDims[tex.output.length];
+
+  const kernel = GpuEz.getPreKernel(false, tex.output.length, tex.kernel.returnType);
   if (!kernel) return null;
+
   kernel.setOutput(tex.output);
   const result = kernel(tex);
   return result;
 };
 
-GpuEz.getArrayDim = function(arr) {
+GpuEz.getArrayDim = function(arr, vec) {
   const dim = [];
   let sub = arr;
 
@@ -165,33 +184,41 @@ GpuEz.getArrayDim = function(arr) {
     sub = sub[0];
   }
 
+  if (vec) while (--vec) dim.shift();
   return dim;
 };
 
-GpuEz.arrayToTex = function arrayToTex(arr) {
-  const dim = GpuEz.getArrayDim(arr);
-  const kernel = GpuEz.arrayToTexKernelByDims[dim.length];
+GpuEz.arrayToTex = function arrayToTex(arr, type) {
+  const vecType = GpuEz.returnTypes[type] || type || GpuEz.returnTypes[1];
+  const vec = GpuEz.returnTypeDims[vecType] || 1;
+  const dim = GpuEz.getArrayDim(arr, vec);
+
+  const kernel = GpuEz.getPreKernel(true, dim.length, vecType);
   if (!kernel) return null;
+
   kernel.setOutput(dim);
   const result = kernel(arr);
   return result;
 };
 
-GpuEz.loadData = GpuEz.arrayToTex;
+GpuEz.getDimArray = function getDimArray(arr, dim) {
+  const nDim = dim | 0;
+  if (dim <= 0) return arr;
+  if (dim === 1) return Array.from(arr);
+  return arr.map(item => GpuEz.getDimArray(item, dim - 1));
+}
 
-GpuEz.getArray = function getArray(tex) {
+GpuEz.getDataArray = function getArray(tex) {
   const arr = 0 in tex ? tex : GpuEz.texToArray(tex);
   const dim = GpuEz.getArrayDim(arr);
-
-  switch (dim.length) {
-    case 0: return arr;
-    case 1: return Array.from(arr);
-    case 2: return arr.map(y => Array.from(y));
-    case 3: return arr.map(z => z.map(y => Array.from(y)));
-    case 4: return arr.map(v => v.map(z => z.map(y => Array.from(y))));
-    default: throw new Error(`Dimension ${dim.length} is not supported`);
-  }
+  const res = GpuEz.getDimArray(arr, dim.length);
+  return res;
 };
+
+GpuEz.loadData = GpuEz.arrayToTex;
+GpuEz.putData = GpuEz.arrayToTex;
+GpuEz.getData = GpuEz.texToArray;
+GpuEz.getArray = GpuEz.getDataArray;
 
 GpuEz.gpuFree = function gpuFree() {
   const {gpu} = GpuEz;
