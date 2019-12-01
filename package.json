@@ -1,6 +1,6 @@
 {
   "name": "gpu-ez",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Easy GLSL parallel computing on GPU.JS",
   "main": "index.js",
   "scripts": {

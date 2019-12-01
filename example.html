@@ -4,16 +4,16 @@
   </head>
 
   <body>
-    <textarea id="result"></textarea>
+    <textarea id="result" rows="3" cols="50"></textarea>
 
-    <script src="gpu.rocks/gpu-browser-core.min.js"></script>
-    <script src="gpu.rocks/gpu-browser.min.js"></script>
+    <script src="gpu.rocks/gpu-browser.js"></script>
     <script src="gpu-ez.js"></script>
 
     <script>
 
 async function glsl(file) {
-  const content = await fetch(`glsl/${file}`).then(res => res.text());
+  const res = await fetch(`glsl/${file}`);
+  const content = await res.text();
   return GpuEz.glsl(content);
 }
 
@@ -27,6 +27,7 @@ async function main() {
   function invMatrix(matrix) {
     const size = matrix.length;
     let invStep = invInit(matrix, size); 
+
 
     for (let i = 0; i < size; i++) {
       const norm = invRow(invStep, size, i);

@@ -1,4 +1,4 @@
-const {glslDir, gpuFree} = require('.');
+const {getDataArray, glslDir, gpuFree} = require('.');
 const glsl = glslDir(`${__dirname}/glsl`);
 
 async function main() {
@@ -25,8 +25,9 @@ async function main() {
     }
 
     const matrix = [
-      [1, 2],
-      [3, 4]
+      [1, 2, 2],
+      [2, 2, 3],
+      [3, 3, 4]
     ];
 
     const inv = invMatrix(matrix);
