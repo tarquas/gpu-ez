@@ -12,7 +12,7 @@ GpuEz.returnTypes = {
   4: 'Array(4)'
 };
 
-GpuEz.returnTypeDims = Object.assign({}, ...Object.entries(GpuEz.returnTypes).map(([k, v]) => ({[v]: k})));
+GpuEz.returnTypeDims = Object.assign({}, ...Object.entries(GpuEz.returnTypes).map(([k, v]) => ({[v]: +k})));
 
 GpuEz.preKernelFuncs = {
   1: function(arr) {return arr[this.thread.x];},
@@ -21,6 +21,11 @@ GpuEz.preKernelFuncs = {
 };
 
 GpuEz.preKernels = {get: {1: {}, 2: {}, 3: {}}, put: {1: {}, 2: {}, 3: {}}};
+
+GpuEz.getArgType = function getArgType(vec, dim) {
+  if (!dim) return vec > 1 ? `Array(${vec})` : 'Float';
+  return vec > 1 ? `Array${dim}D(${vec})` : 'Array'
+}
 
 GpuEz.getPreKernel = function getPreKernel(put, dim, type) {
   const pre = GpuEz.preKernels;
@@ -38,7 +43,7 @@ GpuEz.getPreKernel = function getPreKernel(put, dim, type) {
 
   const opts = {
     pipeline: !!put, immutable: true, dynamicOutput: true, dynamicArguments: true,
-    returnType: type, argumentTypes: {arr: vec > 1 ? `Array${nDim}D(${vec})` : 'Array'}
+    returnType: type, argumentTypes: {arr: GpuEz.getArgType(vec, nDim)}
   };
 
   const newKernel = GpuEz.gpu.createKernel(func, opts);
@@ -90,10 +95,19 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const argEnts = args.match(GpuEz.rxArgItems).map(arg => arg.match(GpuEz.rxArgItem)).filter(x => x);
 
   const argNames = argEnts.map(arg => arg[1]);
-  const argVecs = argEnts.map(arg => arg[2]);
+  const argVecs = argEnts.map(arg => arg[2] | 0);
+  const argDims = argEnts.map(arg => arg[3] | 0);
   const argMacro = argEnts.map(GpuEz.argEntsMacro).join('');
 
   const funcDesc = {name, source: `${argMacro}${content}`};
+
+  const argumentTypes = {};
+
+  for (let i = 0; i < argEnts.length; i++) {
+    const vec = argVecs[i];
+    const nDim = argDims[i];
+    argumentTypes[argNames[i]] = GpuEz.getArgType(vec, nDim);
+  }
 
   const kernelSettings = [
     Function(
@@ -111,6 +125,7 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
       dynamicOutput: true,
       dynamicArguments: true,
       returnType: GpuEz.returnTypes[vec] || GpuEz.returnTypes[1],
+      argumentTypes,
       debug: !!debug
     }
   ];
@@ -123,18 +138,14 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
   const invoke = eval(`(function ${name}(...args) {
     const temps = [];
     for (let i = 0; i < args.length; i++) if (args[i] instanceof Array || args[i] instanceof Float32Array) {
-      temps.push(
-        args[i] = GpuEz.arrayToTex(
-          args[i],
-          GpuEz.returnTypes[argVecs[i]] || GpuEz.returnTypes[1]
-        )
-      );
+      temps.push(args[i] = GpuEz.arrayToTex(args[i],
+        GpuEz.returnTypes[argVecs[i]] || GpuEz.returnTypes[1]));
     }
     const [${argNames}] = args;
     kernel.loopMaxIterations = parseInt(${iters});
     kernel.setOutput(GpuEz.fixDimObj(${dim}));
     const res = kernel(...args);
-    for (const tex of temps) tex.delete();
+    for (const tex of temps) if (tex.delete) tex.delete();
     return res;
   })`);
 
@@ -192,6 +203,7 @@ GpuEz.arrayToTex = function arrayToTex(arr, type) {
   const vecType = GpuEz.returnTypes[type] || type || GpuEz.returnTypes[1];
   const vec = GpuEz.returnTypeDims[vecType] || 1;
   const dim = GpuEz.getArrayDim(arr, vec);
+  if (!dim.length) return arr;
 
   const kernel = GpuEz.getPreKernel(true, dim.length, vecType);
   if (!kernel) return null;
