@@ -42,7 +42,7 @@ GpuEz.getPreKernel = function getPreKernel(put, dim, type) {
   const func = GpuEz.preKernelFuncs[nDim];
 
   const opts = {
-    pipeline: !!put, immutable: true, dynamicOutput: true, dynamicArguments: true,
+    pipeline: !!put, dynamicOutput: true, dynamicArguments: true, tactic: 'precision',
     returnType: type, argumentTypes: {arr: GpuEz.getArgType(vec, nDim)}
   };
 
@@ -121,9 +121,9 @@ GpuEz.glsl = function gpuGlsl(content, debug) {
     {
       nativeFunctions: [funcDesc],
       pipeline: true,
-      immutable: true,
       dynamicOutput: true,
       dynamicArguments: true,
+      tactic: 'precision',
       returnType: GpuEz.returnTypes[vec] || GpuEz.returnTypes[1],
       argumentTypes,
       debug: !!debug
